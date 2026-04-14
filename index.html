@@ -22,7 +22,7 @@
   }
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text-primary);background:var(--bg-secondary);min-height:100vh;}
-.wrap{max-width:620px;margin:0 auto;padding:2rem 1rem 4rem;}
+.wrap{max-width:680px;margin:0 auto;padding:2rem 1rem 4rem;}
 h1{font-size:22px;font-weight:500;margin-bottom:4px;}
 .sub{font-size:13px;color:var(--text-secondary);margin-bottom:20px;}
 
@@ -51,8 +51,13 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
 .field textarea{font-family:monospace;font-size:11px;padding:10px;border-radius:var(--r-md);border:0.5px solid var(--border-s);background:var(--bg-secondary);color:var(--text-primary);width:100%;resize:vertical;min-height:220px;line-height:1.65;}
 .field textarea:focus{outline:none;border-color:var(--border-p);}
 
-.check-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none;margin-top:8px;}
-.check-row input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:var(--text-primary);}
+.seg-ctrl{display:flex;gap:0;border:0.5px solid var(--border-s);border-radius:var(--r-md);overflow:hidden;width:fit-content;}
+.seg-btn{font-family:inherit;font-size:12px;font-weight:500;padding:6px 18px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;transition:background .12s,color .12s;}
+.seg-btn:not(:last-child){border-right:0.5px solid var(--border-s);}
+.seg-btn.active{background:var(--text-primary);color:var(--bg-primary);}
+.seg-btn:hover:not(.active){background:var(--bg-secondary);}
+
+.xor-note{font-size:12px;color:var(--text-tertiary);margin-top:8px;padding:6px 10px;background:var(--bg-secondary);border-radius:var(--r-md);}
 
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
 .btn{font-family:inherit;font-size:13px;font-weight:500;padding:7px 16px;border-radius:var(--r-md);border:0.5px solid var(--border-s);background:transparent;color:var(--text-primary);cursor:pointer;transition:background .12s;white-space:nowrap;}
@@ -77,6 +82,29 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
 .tab-btn.active{color:var(--text-primary);border-bottom-color:var(--text-primary);}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
+
+/* Preview panel */
+.preview-panel{border:0.5px solid var(--border-t);border-radius:var(--r-md);background:var(--bg-secondary);overflow:hidden;}
+.preview-tabs{display:flex;border-bottom:0.5px solid var(--border-t);background:var(--bg-primary);}
+.preview-tab{font-family:inherit;font-size:11px;font-weight:500;padding:6px 14px;border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;border-bottom:2px solid transparent;transition:color .12s;}
+.preview-tab.active{color:var(--text-primary);border-bottom-color:var(--text-primary);}
+.preview-body{padding:12px;max-height:420px;overflow-y:auto;}
+.label-list{display:flex;flex-direction:column;gap:2px;}
+.label-item{border-radius:var(--r-md);overflow:hidden;border:0.5px solid var(--border-t);}
+.label-hdr{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg-primary);cursor:pointer;user-select:none;}
+.label-hdr:hover{background:var(--bg-secondary);}
+.label-idx{font-size:10px;color:var(--text-tertiary);font-family:monospace;min-width:28px;}
+.label-name{font-size:12px;font-weight:500;flex:1;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.label-caret{font-size:10px;color:var(--text-tertiary);transition:transform .15s;}
+.label-caret.open{transform:rotate(90deg);}
+.label-body{display:none;padding:8px 10px 10px;background:var(--bg-secondary);font-family:monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary);border-top:0.5px solid var(--border-t);}
+.label-body.open{display:block;}
+.search-bar{display:flex;gap:6px;margin-bottom:10px;}
+.search-bar input{font-family:inherit;font-size:12px;padding:6px 10px;border-radius:var(--r-md);border:0.5px solid var(--border-s);background:var(--bg-primary);color:var(--text-primary);flex:1;}
+.search-bar input:focus{outline:none;border-color:var(--border-p);}
+.preview-stats{font-size:11px;color:var(--text-tertiary);margin-bottom:8px;}
+.raw-view{font-family:monospace;font-size:11px;line-height:1.65;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary);}
+.empty-note{font-size:13px;color:var(--text-tertiary);text-align:center;padding:2rem 0;}
 </style>
 </head>
 <body>
@@ -140,11 +168,12 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
     </div>
 
     <div class="card">
-      <div class="card-title">Options</div>
-      <label class="check-row" style="margin-top:0">
-        <input type="checkbox" id="chk-xor">
-        Re-encrypt with XOR (auto-enabled for GMD V1 / GS5)
-      </label>
+      <div class="card-title">Target version</div>
+      <div class="seg-ctrl">
+        <button class="seg-btn active" id="enc-v1-btn" onclick="setEncVer(1)">GMD V1 · GS5</button>
+        <button class="seg-btn" id="enc-v2-btn" onclick="setEncVer(2)">GMD V2 · GS6</button>
+      </div>
+      <div class="xor-note" id="enc-xor-note">V1 (GS5 / Dual Destinies) always applies XOR encryption.</div>
     </div>
 
     <div class="card">
@@ -194,6 +223,25 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
         <button class="btn btn-primary" onclick="dlSimple()">Download .user2.en</button>
       </div>
       <div class="dl-meta" id="sim-dl-meta"></div>
+
+      <!-- Text preview panel -->
+      <div style="margin-top:16px;">
+        <div style="font-size:11px;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Text preview</div>
+        <div class="preview-panel">
+          <div class="preview-tabs">
+            <button class="preview-tab active" onclick="switchPreviewTab('labels')">Labels</button>
+            <button class="preview-tab" onclick="switchPreviewTab('raw')">Raw decoded</button>
+          </div>
+          <div class="preview-body">
+            <div id="preview-labels" class="preview-tab-pane">
+              <div class="empty-note">Run a conversion to see preview.</div>
+            </div>
+            <div id="preview-raw" class="preview-tab-pane" style="display:none">
+              <div class="empty-note">Run a conversion to see preview.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -206,6 +254,24 @@ function switchTab(name) {
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
+}
+
+let encTargetVer = 1;
+function setEncVer(v) {
+  encTargetVer = v;
+  document.getElementById('enc-v1-btn').classList.toggle('active', v===1);
+  document.getElementById('enc-v2-btn').classList.toggle('active', v===2);
+  document.getElementById('enc-xor-note').textContent = v===1
+    ? 'V1 (GS5 / Dual Destinies) always applies XOR encryption.'
+    : 'V2 (GS6 / Spirit of Justice) — no XOR encryption applied.';
+}
+
+function switchPreviewTab(name) {
+  document.querySelectorAll('.preview-tab').forEach((b,i)=>{
+    b.classList.toggle('active',['labels','raw'][i]===name);
+  });
+  document.getElementById('preview-labels').style.display = name==='labels'?'':'none';
+  document.getElementById('preview-raw').style.display   = name==='raw'?'':'none';
 }
 
 function setStatus(id, msg, cls) {
@@ -282,15 +348,12 @@ function isPlaintext(d){try{return/<E[\w\s]+[0-9]+>/.test(new TextDecoder('ascii
 function processContent(d){if(isPlaintext(d))return d;const p=xorCipher(d,1);if(isPlaintext(p))return p;return d;}
 
 // ── MAPS ────────────────────────────────────────────
-// 66049 = 0x00010201 = bytes 01 02 01 00 (LE) = GS5/DD
-// 66306 = 0x00010302 = bytes 02 03 01 00 (LE) = GS6/SoJ
 const VER_FROM={66049:1,66306:2};
 const VER_TO={1:66049,2:66306};
 const LANG_FROM={0:'Japanese',1:'English',2:'French',3:'Spanish',4:'German',5:'Italian'};
 const LANG_TO={Japanese:0,English:1,French:2,Spanish:3,German:4,Italian:5};
 function replaceFullwidth(s){return s.replace(/[\uFF00-\uFFEF]/g,'###');}
 
-// ── AUTO-DETECT VERSION ─────────────────────────────
 function detectGmdVersion(u8){
   if(!(u8[0]===71&&u8[1]===77&&u8[2]===68&&u8[3]===0))return null;
   const dv=new DataView(u8.buffer,u8.byteOffset);
@@ -385,10 +448,11 @@ function gmdToText(gmd){
 }
 
 // ── TEXT → GMD ──────────────────────────────────────
-function textToGmd(text,isLE=true,xorEncoding=false){
+function textToGmd(text,isLE=true,targetVer=null){
   const lines=text.split('\n');let li=0;
   const filename=lines[li++].trim().replace(/^\{|\}$/g,'');
-  const version=parseInt(lines[li++].trim().replace(/^\{|\}$/g,'').replace('GMD V',''));
+  let version=parseInt(lines[li++].trim().replace(/^\{|\}$/g,'').replace('GMD V',''));
+  if(targetVer&&[1,2].includes(targetVer))version=targetVer;
   const language=lines[li++].trim().replace(/^\{|\}$/g,'');
   const labelCount=parseInt(lines[li++].trim().replace(/^\{|\}$/g,''));
   const sectionCount=parseInt(lines[li++].trim().replace(/^\{|\}$/g,''));
@@ -428,6 +492,7 @@ function textToGmd(text,isLE=true,xorEncoding=false){
   const sectionSizeCalc=contentBytes.length;
   const langInt=LANG_TO[language]??0;
   const versionInt=VER_TO[version]||version;
+  const xorEncoding=(version===1);
 
   const w=new Writer();
   w.write([71,77,68,0]);
@@ -459,11 +524,6 @@ function textToGmd(text,isLE=true,xorEncoding=false){
 }
 
 // ── GMD → USER2 PIPELINE ────────────────────────────
-// Stage 1: GMD binary → decoded text  (reuses parseGmd/gmdToText)
-// Stage 2: decoded text → JSON        (gs56-script-converter.py port)
-// Stage 3: JSON → user2 binary        (gs456scr.py port)
-
-// ── STAGE 2: text → JSON (gs56-script-converter.py) ──
 const DD_MAPPING = {
   "CNTR":"CENTER","ICON PAD_X":"ICN 2","ICON PAD_L":"ICN 4","ICON PAD_R":"ICN 5",
   "ICON PAD_CROSS":"ICN 9","ICON PAD_SLIDE":"ICN 8",
@@ -678,14 +738,12 @@ const NO_PREFIX_TAGS = new Set(["CENTER","ICN","PAGE"]);
 const NO_COMMA_TAGS = new Set(["ICN ","ICN 0","ICN 2","ICN 4","ICN 5","ICN 6","ICN 7","ICN 8","ICN 9","ICN 10","ICN 11","ICN 12","ICN 13","ICN 14","ICN 15","ICN 16","ICN 19","ICN 20","ICN 21","ICN 22","ICN 23"]);
 const REMOVE_TAGS = new Set(["SEC_END"]);
 
-// Build merged mapping: DD + SOJ (+ SOJ overwrites for SoJ files)
 function buildMapping(isSOJ) {
   if(isSOJ) return {...DD_MAPPING,...SOJ_MAPPING,...SOJ_OVERWRITE};
   return {...DD_MAPPING,...SOJ_MAPPING};
 }
 
 function applyTagMapping(line, mapping) {
-  // Replace <ENTRY ...> with <CODE ...>
   for(const [entry, code] of Object.entries(mapping)) {
     const esc = entry.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     line = line.replace(new RegExp('<'+esc,'g'), '<'+code);
@@ -701,12 +759,10 @@ function removeTagsFromLine(line) {
 }
 
 function addPrefixAndCommas(line) {
-  // Replace spaces inside <...> with commas, unless in NO_COMMA_TAGS
   line = line.replace(/<([^>]+)>/g, (match, inner) => {
     if(NO_COMMA_TAGS.has(inner) || NO_COMMA_TAGS.has(inner+' ')) return match;
     return '<' + inner.replace(/ /g,',') + '>';
   });
-  // Add XXXX prefix to tags that don't have no_prefix
   line = line.replace(/<(?!XXXX\s)(\w+)([ ,>])/g, (match, tag, sep) => {
     if(NO_PREFIX_TAGS.has(tag)) return match;
     return '<XXXX '+tag+sep;
@@ -714,13 +770,11 @@ function addPrefixAndCommas(line) {
   return line;
 }
 
-// Port of gs56-script-converter.py convert_to_json (isGMD=true)
 function convertToJson(inputText, isSOJ) {
   const mapping = buildMapping(isSOJ);
   const lines = inputText.trim().split('\n');
   const result = {name:'Unknown', labels:[]};
 
-  // First line has {filename}
   const nameMatch = lines[0].match(/\{([^}]+)\}/);
   if(nameMatch) result.name = nameMatch[1];
 
@@ -728,21 +782,18 @@ function convertToJson(inputText, isSOJ) {
 
   for(let i=1; i<lines.length; i++) {
     const line = lines[i];
-    // Label line: starts with { and contains digits:digits... pattern
     if(line.startsWith('{') && line.endsWith('}')) {
       const labelTest = line.match(/\{(\d+:\d+.*?)\}/);
       if(labelTest) {
         if(currentLabel !== null) {
           result.labels.push([currentLabel, currentData.join('').replace(/\r?\n$/,'')]);
         }
-        // Extract the label name (last colon-separated segment)
         const labelMatch = line.match(/[^:}]+(?=})/);
         currentLabel = labelMatch ? labelMatch[0] : line.slice(1,-1);
         currentData = [];
         continue;
       }
     }
-    // Content line
     if(currentLabel !== null) {
       let l = line;
       l = applyTagMapping(l, mapping);
@@ -757,7 +808,7 @@ function convertToJson(inputText, isSOJ) {
   return result;
 }
 
-// ── STAGE 3: JSON → user2 binary (gs456scr.py encode, GS56 path) ──
+// ── STAGE 3: JSON → user2 binary ────────────────────
 const USRHDR_SIZE = 48;
 const CLASS_GS56 = [0x83f3f042, 0x0b263156];
 const CLASS_NAME = [0xee933aa7, 0x1aa1a4ac];
@@ -765,16 +816,9 @@ const CLASS_NAME = [0xee933aa7, 0x1aa1a4ac];
 function roundUp(x, l) { return Math.ceil(x/l)*l; }
 
 function encodeUser2(data) {
-  // data = {name: string, labels: [[label, text], ...]}
   const labels = data.labels;
-  const instanceCount = labels.length + 1; // +1 for name
+  const instanceCount = labels.length + 1;
 
-  // Calculate sizes first
-  // Each label entry: 4 (len) + (label+1)*2 padded to 4 + 4 (len) + (text+1)*2 padded to 4
-  // Name entry: 4 + (name+1)*2 padded to 4
-  // Then 4 (count) + 4*instanceCount-1 (indices)
-
-  // Build data section in a Writer
   const dataSec = new Writer();
 
   for(const [label, text] of labels) {
@@ -782,8 +826,7 @@ function encodeUser2(data) {
     const textEnc  = encodeUTF16LE(text);
     dataSec.u32(label.length + 1, true);
     dataSec.write(labelEnc);
-    dataSec.write(new Uint8Array(2)); // null terminator
-    // pad to 4
+    dataSec.write(new Uint8Array(2));
     const lPos = dataSec.size;
     if(lPos % 4 !== 0) dataSec.write(new Uint8Array(4 - lPos%4));
 
@@ -794,7 +837,6 @@ function encodeUser2(data) {
     if(tPos % 4 !== 0) dataSec.write(new Uint8Array(4 - tPos%4));
   }
 
-  // Name
   const nameEnc = encodeUTF16LE(data.name);
   dataSec.u32(data.name.length + 1, true);
   dataSec.write(nameEnc);
@@ -802,54 +844,41 @@ function encodeUser2(data) {
   const nPos = dataSec.size;
   if(nPos % 4 !== 0) dataSec.write(new Uint8Array(4 - nPos%4));
 
-  // Index table
   dataSec.u32(instanceCount - 1, true);
   for(let i=0; i<instanceCount-1; i++) dataSec.u32(i+1, true);
 
   const dataBytes = dataSec.toU8();
 
-  // RSZ header
-  // instance_offset = 52 (from RSZ start): 4+4+4+4+4+8+8+8+4 = 48? let's compute properly
-  // RSZ header fields: magic(4)+ver(4)+objCount(4)+instCount(4)+udCount(4)+reserved(4)+instOffset(8)+dataOffset(8)+udOffset(8)+objTable(4) = 52 bytes
-  // Then null(8) + instanceCount entries of 8 bytes each
   const rszHeaderFixed = 52;
-  const instanceTableSize = 8 + instanceCount * 8; // null + entries
+  const instanceTableSize = 8 + instanceCount * 8;
   const dataOffset = roundUp(rszHeaderFixed + instanceTableSize, 16);
 
   const rsz = new Writer();
-  rsz.write([82,83,90,0]); // RSZ\0
-  rsz.u32(16, true);       // version
-  rsz.u32(1, true);        // object count
-  rsz.u32(instanceCount+1, true); // instance count
-  rsz.u32(0, true);        // userdata count
-  rsz.u32(0, true);        // reserved
-  rsz.u32(rszHeaderFixed, true); rsz.u32(0, true); // instance offset (8 bytes)
-  rsz.u32(dataOffset, true); rsz.u32(0, true);     // data offset (8 bytes)
-  rsz.u32(dataOffset, true); rsz.u32(0, true);     // userdata offset (8 bytes)
-  rsz.u32(instanceCount, true); // object table
-  // null instance
+  rsz.write([82,83,90,0]);
+  rsz.u32(16, true);
+  rsz.u32(1, true);
+  rsz.u32(instanceCount+1, true);
+  rsz.u32(0, true);
+  rsz.u32(0, true);
+  rsz.u32(rszHeaderFixed, true); rsz.u32(0, true);
+  rsz.u32(dataOffset, true); rsz.u32(0, true);
+  rsz.u32(dataOffset, true); rsz.u32(0, true);
+  rsz.u32(instanceCount, true);
   rsz.u32(0,true); rsz.u32(0,true);
-  // GS56 instances (instanceCount-1 of CLASS_GS56)
   for(let i=0; i<instanceCount-1; i++) {
     rsz.u32(CLASS_GS56[0],true); rsz.u32(CLASS_GS56[1],true);
   }
-  // CLASS_NAME instance
   rsz.u32(CLASS_NAME[0],true); rsz.u32(CLASS_NAME[1],true);
-  // pad to dataOffset
   const rszCur = rsz.size;
   if(rszCur < dataOffset) rsz.write(new Uint8Array(dataOffset - rszCur));
-  // data
   rsz.write(dataBytes);
 
   const rszBytes = rsz.toU8();
 
-  // USR header (48 bytes)
   const usr = new Writer();
-  usr.write([85,83,82,0]); // USR\0
-  usr.u32(0,true); usr.u32(0,true); usr.u32(0,true); // resource/userdata/info counts
-  // resource/userdata/data offsets (8 bytes each) = USRHDR_SIZE
+  usr.write([85,83,82,0]);
+  usr.u32(0,true); usr.u32(0,true); usr.u32(0,true);
   for(let i=0;i<3;i++){ usr.u32(USRHDR_SIZE,true); usr.u32(0,true); }
-  // pad to 16
   while(usr.size % 16 !== 0) usr.u8(0);
 
   usr.write(rszBytes);
@@ -863,62 +892,79 @@ function encodeUTF16LE(str) {
   return buf;
 }
 
+// ── PREVIEW RENDERER ────────────────────────────────
+let previewData = null;
+
+function renderPreview(jsonData, rawDecodedText) {
+  previewData = {jsonData, rawDecodedText};
+
+  // Labels tab
+  const labelsEl = document.getElementById('preview-labels');
+  const labels = jsonData.labels;
+  if(!labels.length){
+    labelsEl.innerHTML='<div class="empty-note">No labels found.</div>';
+  } else {
+    // Filter bar + list
+    labelsEl.innerHTML = `
+      <div class="search-bar">
+        <input type="text" id="preview-search" placeholder="Filter by label name or content…" oninput="filterPreview()">
+      </div>
+      <div class="preview-stats" id="preview-stats">${labels.length} labels</div>
+      <div class="label-list" id="preview-list"></div>
+    `;
+    renderLabelList(labels, '');
+  }
+
+  // Raw tab
+  const rawEl = document.getElementById('preview-raw');
+  rawEl.innerHTML = `<div class="raw-view">${escapeHtml(rawDecodedText)}</div>`;
+}
+
+function renderLabelList(labels, filter) {
+  const list = document.getElementById('preview-list');
+  const stats = document.getElementById('preview-stats');
+  if(!list) return;
+  const q = filter.toLowerCase();
+  const filtered = labels.filter(([name, text]) =>
+    !q || name.toLowerCase().includes(q) || text.toLowerCase().includes(q)
+  );
+  stats.textContent = filter ? `${filtered.length} of ${labels.length} labels` : `${labels.length} labels`;
+  list.innerHTML = filtered.map(([name, text], i) => {
+    const hasText = text.trim().length > 0;
+    return `<div class="label-item">
+      <div class="label-hdr" onclick="toggleLabel(this)">
+        <span class="label-idx">#${i}</span>
+        <span class="label-name">${escapeHtml(name)}</span>
+        ${hasText?'<span class="label-caret">&#9658;</span>':'<span class="label-caret" style="opacity:.3">&#9658;</span>'}
+      </div>
+      ${hasText?`<div class="label-body">${escapeHtml(text)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function toggleLabel(hdr) {
+  const body = hdr.nextElementSibling;
+  if(!body) return;
+  const caret = hdr.querySelector('.label-caret');
+  const open = body.classList.toggle('open');
+  if(caret) caret.classList.toggle('open', open);
+}
+
+function filterPreview() {
+  const q = document.getElementById('preview-search').value;
+  if(previewData) renderLabelList(previewData.jsonData.labels, q);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 // ── STATE ────────────────────────────────────────────
 let decFileData=null,decFileName='',decOutName='';
 let encFileText=null,encFileName='',encOutBytes=null,encOutName='';
 let simFileData=null,simFileName='',simOutBytes=null,simOutName='';
 
 // ── DECODE ───────────────────────────────────────────
-
-setupDrop('drop-simple','sim-file-input',async f=>{
-  simFileName=f.name;
-  document.getElementById('sim-drop-text').textContent=f.name;
-  document.getElementById('sim-out-card').style.display='none';
-  document.getElementById('sim-status').style.display='none';
-  document.getElementById('sim-ver-badge').textContent='';
-  const buf=await readArrayBuffer(f);
-  simFileData=new Uint8Array(buf);
-  const ver=detectGmdVersion(simFileData);
-  const game=ver===1?'GS5 · DD':ver===2?'GS6 · SoJ':null;
-  if(game){
-    document.getElementById('sim-ver-badge').textContent=`V${ver} — ${game}`;
-    setMeta('sim-meta',[['Version','V'+ver],['Game',game],['File',f.name],['Size',formatBytes(f.size)]]);
-    setStatus('sim-status',`Auto-detected V${ver} (${game}) · ${formatBytes(f.size)}`,'ok');
-  } else {
-    setMeta('sim-meta',[['File',f.name],['Size',formatBytes(f.size)],['Version','?']]);
-    setStatus('sim-status','Loaded · version unknown','warn');
-  }
-  document.getElementById('btn-simple').disabled=false;
-});
-
-async function runSimple(){
-  if(!simFileData){setStatus('sim-status','No file loaded','err');return;}
-  setStatus('sim-status','Stage 1/3: Decoding GMD…','');
-  try{
-    // Stage 1: GMD → decoded text
-    const gmd=parseGmd(simFileData.buffer,true);
-    const decodedText=gmdToText(gmd);
-    const isSOJ=(gmd.version===2);
-
-    setStatus('sim-status','Stage 2/3: Converting tags to JSON…','');
-    // Stage 2: decoded text → JSON object
-    const jsonData=convertToJson(decodedText, isSOJ);
-
-    setStatus('sim-status','Stage 3/3: Encoding user2 binary…','');
-    // Stage 3: JSON → user2 binary
-    simOutBytes=encodeUser2(jsonData);
-    // Output name: strip .gmd, add .user2.en
-    simOutName=baseName(simFileName)+'.user2.en';
-    document.getElementById('sim-dl-meta').textContent=simOutName+' · '+formatBytes(simOutBytes.length);
-    document.getElementById('sim-out-card').style.display='';
-    setStatus('sim-status',`Done · ${jsonData.labels.length} labels · saved as ${simOutName}`,'ok');
-  }catch(e){setStatus('sim-status','Error: '+e.message,'err');console.error(e);}
-}
-
-function dlSimple(){
-  if(!simOutBytes)return;
-  dlBlob(new Blob([simOutBytes],{type:'application/octet-stream'}),simOutName||'output.user2.en');
-}
 setupDrop('drop-decode','dec-file-input',async f=>{
   decFileName=f.name;
   document.getElementById('dec-drop-text').textContent=f.name;
@@ -970,11 +1016,10 @@ setupDrop('drop-encode','enc-file-input',async f=>{
   document.getElementById('enc-out-card').style.display='none';
   document.getElementById('enc-status').style.display='none';
   encFileText=await readText(f);
-  // Auto-detect version from text header and set XOR accordingly
   const vMatch=encFileText.match(/\{GMD V(\d+)\}/);
   const ver=vMatch?parseInt(vMatch[1]):null;
-  document.getElementById('chk-xor').checked=(ver===1);
-  const verNote=ver?` · GMD V${ver} detected, XOR ${ver===1?'enabled':'disabled'}`:'';
+  if(ver===1||ver===2) setEncVer(ver);
+  const verNote=ver?` · GMD V${ver} detected`:'';
   setStatus('enc-status','Loaded '+f.name+' · '+formatBytes(f.size)+verNote,'ok');
   document.getElementById('btn-encode').disabled=false;
 });
@@ -983,12 +1028,12 @@ async function runEncode(){
   if(!encFileText){setStatus('enc-status','No file loaded','err');return;}
   setStatus('enc-status','Encoding…','');
   try{
-    const xor=document.getElementById('chk-xor').checked;
-    encOutBytes=textToGmd(encFileText,true,xor);
+    encOutBytes=textToGmd(encFileText,true,encTargetVer);
     encOutName=baseName(encFileName)+'.gmd';
-    document.getElementById('enc-dl-meta').textContent=encOutName+' · '+formatBytes(encOutBytes.length)+(xor?' · XOR encrypted':'');
+    const xorUsed=(encTargetVer===1);
+    document.getElementById('enc-dl-meta').textContent=encOutName+' · '+formatBytes(encOutBytes.length)+(xorUsed?' · XOR encrypted':'');
     document.getElementById('enc-out-card').style.display='';
-    setStatus('enc-status','Encoded → '+encOutName+(xor?' (XOR)':''),'ok');
+    setStatus('enc-status',`Encoded as GMD V${encTargetVer} → ${encOutName}${xorUsed?' (XOR applied)':''}`,'ok');
   }catch(e){setStatus('enc-status','Error: '+e.message,'err');}
 }
 
@@ -997,7 +1042,55 @@ function dlEncoded(){
   dlBlob(new Blob([encOutBytes],{type:'application/octet-stream'}),encOutName||'output.gmd');
 }
 
+// ── GMD → USER2 ──────────────────────────────────────
+setupDrop('drop-simple','sim-file-input',async f=>{
+  simFileName=f.name;
+  document.getElementById('sim-drop-text').textContent=f.name;
+  document.getElementById('sim-out-card').style.display='none';
+  document.getElementById('sim-status').style.display='none';
+  document.getElementById('sim-ver-badge').textContent='';
+  const buf=await readArrayBuffer(f);
+  simFileData=new Uint8Array(buf);
+  const ver=detectGmdVersion(simFileData);
+  const game=ver===1?'GS5 · DD':ver===2?'GS6 · SoJ':null;
+  if(game){
+    document.getElementById('sim-ver-badge').textContent=`V${ver} — ${game}`;
+    setMeta('sim-meta',[['Version','V'+ver],['Game',game],['File',f.name],['Size',formatBytes(f.size)]]);
+    setStatus('sim-status',`Auto-detected V${ver} (${game}) · ${formatBytes(f.size)}`,'ok');
+  } else {
+    setMeta('sim-meta',[['File',f.name],['Size',formatBytes(f.size)],['Version','?']]);
+    setStatus('sim-status','Loaded · version unknown','warn');
+  }
+  document.getElementById('btn-simple').disabled=false;
+});
 
+async function runSimple(){
+  if(!simFileData){setStatus('sim-status','No file loaded','err');return;}
+  setStatus('sim-status','Stage 1/3: Decoding GMD…','');
+  try{
+    const gmd=parseGmd(simFileData.buffer,true);
+    const decodedText=gmdToText(gmd);
+    const isSOJ=(gmd.version===2);
+
+    setStatus('sim-status','Stage 2/3: Converting tags to JSON…','');
+    const jsonData=convertToJson(decodedText, isSOJ);
+
+    setStatus('sim-status','Stage 3/3: Encoding user2 binary…','');
+    simOutBytes=encodeUser2(jsonData);
+    simOutName=baseName(simFileName)+'.user2.en';
+    document.getElementById('sim-dl-meta').textContent=simOutName+' · '+formatBytes(simOutBytes.length);
+    document.getElementById('sim-out-card').style.display='';
+    setStatus('sim-status',`Done · ${jsonData.labels.length} labels · saved as ${simOutName}`,'ok');
+
+    // Render preview
+    renderPreview(jsonData, decodedText);
+  }catch(e){setStatus('sim-status','Error: '+e.message,'err');console.error(e);}
+}
+
+function dlSimple(){
+  if(!simOutBytes)return;
+  dlBlob(new Blob([simOutBytes],{type:'application/octet-stream'}),simOutName||'output.user2.en');
+}
 </script>
 </body>
 </html>
