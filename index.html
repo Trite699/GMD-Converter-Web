@@ -210,9 +210,9 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
     </div>
 
     <div class="card">
-      <div class="card-title">Pipeline <span class="card-title-right">GMD → decoded text → JSON → user2 binary</span></div>
+      <div class="card-title">Pipeline <span class="card-title-right">GMD → decoded text → JSON → user.2. binary</span></div>
       <div class="btn-row">
-        <button class="btn btn-primary" id="btn-simple" disabled onclick="runSimple()">Convert GMD → user2.en</button>
+        <button class="btn btn-primary" id="btn-simple" disabled onclick="runSimple()">Convert GMD → user.2.en</button>
       </div>
       <div class="status" id="sim-status" style="display:none"><span class="dot"></span><span id="sim-status-text"></span></div>
     </div>
@@ -1077,7 +1077,7 @@ async function runSimple(){
 
     setStatus('sim-status','Stage 3/3: Encoding user2 binary…','');
     simOutBytes=encodeUser2(jsonData);
-    simOutName=baseName(simFileName)+'.user2.en';
+    simOutName=baseName(simFileName)+'.user.2.en';
     document.getElementById('sim-dl-meta').textContent=simOutName+' · '+formatBytes(simOutBytes.length);
     document.getElementById('sim-out-card').style.display='';
     setStatus('sim-status',`Done · ${jsonData.labels.length} labels · saved as ${simOutName}`,'ok');
