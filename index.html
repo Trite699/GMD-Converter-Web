@@ -83,7 +83,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
 
-/* Preview panel */
 .preview-panel{border:0.5px solid var(--border-t);border-radius:var(--r-md);background:var(--bg-secondary);overflow:hidden;}
 .preview-tabs{display:flex;border-bottom:0.5px solid var(--border-t);background:var(--bg-primary);}
 .preview-tab{font-family:inherit;font-size:11px;font-weight:500;padding:6px 14px;border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;border-bottom:2px solid transparent;transition:color .12s;}
@@ -133,7 +132,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </label>
       <div class="meta-grid" id="dec-meta" style="display:none"></div>
     </div>
-
     <div class="card">
       <div class="card-title">Convert</div>
       <div class="btn-row">
@@ -141,7 +139,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </div>
       <div class="status" id="dec-status" style="display:none"><span class="dot"></span><span id="dec-status-text"></span></div>
     </div>
-
     <div class="card" id="dec-out-card" style="display:none">
       <div class="card-title">Output</div>
       <div class="field">
@@ -166,7 +163,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
         <input type="file" id="enc-file-input" accept=".txt,*">
       </label>
     </div>
-
     <div class="card">
       <div class="card-title">Target version</div>
       <div class="seg-ctrl">
@@ -175,7 +171,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </div>
       <div class="xor-note" id="enc-xor-note">V1 (GS5 / Dual Destinies) always applies XOR encryption.</div>
     </div>
-
     <div class="card">
       <div class="card-title">Convert</div>
       <div class="btn-row">
@@ -183,7 +178,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </div>
       <div class="status" id="enc-status" style="display:none"><span class="dot"></span><span id="enc-status-text"></span></div>
     </div>
-
     <div class="card" id="enc-out-card" style="display:none">
       <div class="card-title">Output</div>
       <div class="btn-row">
@@ -208,7 +202,6 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </label>
       <div class="meta-grid" id="sim-meta" style="display:none"></div>
     </div>
-
     <div class="card">
       <div class="card-title">Pipeline <span class="card-title-right">GMD → decoded text → JSON → user.2. binary</span></div>
       <div class="btn-row">
@@ -216,15 +209,12 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       </div>
       <div class="status" id="sim-status" style="display:none"><span class="dot"></span><span id="sim-status-text"></span></div>
     </div>
-
     <div class="card" id="sim-out-card" style="display:none">
       <div class="card-title">Output</div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="dlSimple()">Download .user2.en</button>
       </div>
       <div class="dl-meta" id="sim-dl-meta"></div>
-
-      <!-- Text preview panel -->
       <div style="margin-top:16px;">
         <div style="font-size:11px;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Text preview</div>
         <div class="preview-panel">
@@ -233,12 +223,8 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
             <button class="preview-tab" onclick="switchPreviewTab('raw')">Raw decoded</button>
           </div>
           <div class="preview-body">
-            <div id="preview-labels" class="preview-tab-pane">
-              <div class="empty-note">Run a conversion to see preview.</div>
-            </div>
-            <div id="preview-raw" class="preview-tab-pane" style="display:none">
-              <div class="empty-note">Run a conversion to see preview.</div>
-            </div>
+            <div id="preview-labels" class="preview-tab-pane"><div class="empty-note">Run a conversion to see preview.</div></div>
+            <div id="preview-raw" class="preview-tab-pane" style="display:none"><div class="empty-note">Run a conversion to see preview.</div></div>
           </div>
         </div>
       </div>
@@ -344,8 +330,44 @@ function xorCipher(data,ver=1){
   for(let i=0;i<data.length;i++)out[i]=data[i]^k1.charCodeAt(i%k1.length)^k2.charCodeAt(i%k2.length);
   return out;
 }
-function isPlaintext(d){try{return/<E[\w\s]+[0-9]+>/.test(new TextDecoder('ascii').decode(d));}catch{return false;}}
-function processContent(d){if(isPlaintext(d))return d;const p=xorCipher(d,1);if(isPlaintext(p))return p;return d;}
+
+// ── PLAINTEXT DETECTION (FIXED) ──────────────────────
+// Measures the ratio of "text-like" bytes in a sample of the data.
+// Valid GMD text content (names, ages, captions, script lines) consists
+// almost entirely of printable ASCII, null separators, and CR/LF.
+// XOR-garbled data contains many mid-range control bytes and high bytes,
+// so its ratio is noticeably lower even when it accidentally decodes as UTF-8.
+function plaintextScore(data) {
+  const sample = data.slice(0, Math.min(data.length, 256));
+  if (sample.length === 0) return 1;
+  let good = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const b = sample[i];
+    // printable ASCII, null (separator), CR, LF
+    if ((b >= 0x20 && b <= 0x7e) || b === 0x00 || b === 0x0d || b === 0x0a) good++;
+    // allow UTF-8 continuation/lead bytes (multibyte chars)
+    else if (b >= 0xc0) good++;
+  }
+  return good / sample.length;
+}
+
+// A buffer is "plaintext" if it scores above threshold AND decodes as valid UTF-8.
+function isPlaintext(data) {
+  if (plaintextScore(data) < 0.85) return false;
+  try { new TextDecoder('utf-8', {fatal: true}).decode(data); return true; }
+  catch { return false; }
+}
+
+// Determine the correct content bytes:
+// 1. Try raw — if it looks like text, use it as-is (V2 unencrypted, or any tag-style V2).
+// 2. Try XOR V1 — if the result looks like text, the file was V1-encrypted.
+// 3. Fall back to raw (best effort).
+function processContent(data) {
+  if (isPlaintext(data)) return data;
+  const xored = xorCipher(data, 1);
+  if (isPlaintext(xored)) return xored;
+  return data;
+}
 
 // ── MAPS ────────────────────────────────────────────
 const VER_FROM={66049:1,66306:2};
@@ -898,13 +920,11 @@ let previewData = null;
 function renderPreview(jsonData, rawDecodedText) {
   previewData = {jsonData, rawDecodedText};
 
-  // Labels tab
   const labelsEl = document.getElementById('preview-labels');
   const labels = jsonData.labels;
   if(!labels.length){
     labelsEl.innerHTML='<div class="empty-note">No labels found.</div>';
   } else {
-    // Filter bar + list
     labelsEl.innerHTML = `
       <div class="search-bar">
         <input type="text" id="preview-search" placeholder="Filter by label name or content…" oninput="filterPreview()">
@@ -915,7 +935,6 @@ function renderPreview(jsonData, rawDecodedText) {
     renderLabelList(labels, '');
   }
 
-  // Raw tab
   const rawEl = document.getElementById('preview-raw');
   rawEl.innerHTML = `<div class="raw-view">${escapeHtml(rawDecodedText)}</div>`;
 }
@@ -1082,7 +1101,6 @@ async function runSimple(){
     document.getElementById('sim-out-card').style.display='';
     setStatus('sim-status',`Done · ${jsonData.labels.length} labels · saved as ${simOutName}`,'ok');
 
-    // Render preview
     renderPreview(jsonData, decodedText);
   }catch(e){setStatus('sim-status','Error: '+e.message,'err');console.error(e);}
 }
