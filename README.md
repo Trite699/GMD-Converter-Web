@@ -20,7 +20,7 @@ No installation required — runs entirely in your browser.
 -  Version Auto detection
 -  Supports Capcom GMD formats:
   - V1 (AA5)
-  - V2 (AA6,TGAAC)
+  - V2 (AA6,TGAAC,DGS1/2)
 - In-browser editing
 
 ##  Issues
