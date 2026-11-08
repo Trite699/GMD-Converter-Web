@@ -1,4 +1,4 @@
-# MCA ↔ WAV Converter (Web)
+# GMD ↔ TXT Converter (Web)
 
 A lightweight **browser-based converter** for Capcom `.gmd` (Game Message Adapter) script files and standard `.txt` files.
 
