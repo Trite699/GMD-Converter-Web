@@ -110,7 +110,7 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
 <body>
 <div class="wrap">
   <h1>GMD Script Converter</h1>
-  <p class="sub">PW:AA – Dual Destinies (GS5) &amp; Spirit of Justice (GS6) · Auto-detects GMD version</p>
+  <p class="sub">PW:AA – Dual Destinies (GS5) &amp; Spirit of Justice (GS6) &amp; Mobile · Auto-detects GMD version</p>
 
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('decode')">Decode</button>
@@ -128,7 +128,7 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       <label class="drop" id="drop-decode">
         <div class="drop-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
         <span class="drop-label" id="dec-drop-text">Click or drop a .gmd file</span>
-        <span class="drop-hint">.gmd — GS5 or GS6, auto-detected</span>
+        <span class="drop-hint">.gmd — GS5, GS6 or Mobile, auto-detected</span>
         <input type="file" id="dec-file-input" accept=".gmd,*">
       </label>
       <div class="meta-grid" id="dec-meta" style="display:none"></div>
@@ -172,6 +172,7 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       <div class="seg-ctrl">
         <button class="seg-btn active" id="enc-v1-btn" onclick="setEncVer(1)">GMD V1 · GS5</button>
         <button class="seg-btn" id="enc-v2-btn" onclick="setEncVer(2)">GMD V2 · GS6</button>
+        <button class="seg-btn" id="enc-mobile-btn" onclick="setEncVer(3)">GMD Mobile</button>
       </div>
       <div class="xor-note" id="enc-xor-note">V1 (GS5 / Dual Destinies) always applies XOR encryption.</div>
     </div>
@@ -203,7 +204,7 @@ h1{font-size:22px;font-weight:500;margin-bottom:4px;}
       <label class="drop" id="drop-simple">
         <div class="drop-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
         <span class="drop-label" id="sim-drop-text">Click or drop a .gmd file</span>
-        <span class="drop-hint">.gmd — GS5 (V1) or GS6 (V2), auto-detected</span>
+        <span class="drop-hint">.gmd — GS5 (V1), GS6 (V2) or Mobile, auto-detected</span>
         <input type="file" id="sim-file-input" accept=".gmd,*">
       </label>
       <div class="meta-grid" id="sim-meta" style="display:none"></div>
@@ -257,13 +258,17 @@ function switchTab(name) {
 }
 
 let encTargetVer = 1;
+const ENC_NOTES = {
+  1: 'V1 (GS5 / Dual Destinies) always applies XOR encryption.',
+  2: 'V2 (GS6 / Spirit of Justice) — no XOR encryption applied.',
+  3: 'Mobile — plain text content, no XOR encryption applied.'
+};
 function setEncVer(v) {
   encTargetVer = v;
   document.getElementById('enc-v1-btn').classList.toggle('active', v===1);
   document.getElementById('enc-v2-btn').classList.toggle('active', v===2);
-  document.getElementById('enc-xor-note').textContent = v===1
-    ? 'V1 (GS5 / Dual Destinies) always applies XOR encryption.'
-    : 'V2 (GS6 / Spirit of Justice) — no XOR encryption applied.';
+  document.getElementById('enc-mobile-btn').classList.toggle('active', v===3);
+  document.getElementById('enc-xor-note').textContent = ENC_NOTES[v];
 }
 
 function switchPreviewTab(name) {
@@ -349,16 +354,46 @@ function processContent(d){if(isPlaintext(d))return d;const p=xorCipher(d,1);if(
 
 // ── MAPS ────────────────────────────────────────────
 const VER_FROM={66049:1,66306:2};
-const VER_TO={1:66049,2:66306};
+const VER_TO={1:66049,2:66306,3:66306};
+// "Mobile" GMDs share header version 0x10302 with V2 but have a different binary layout,
+// so internally they get their own id (3) and are told apart structurally (see isMobileGmd).
+const MOBILE_VER=3;
+const MOBILE_ENTRY_SIZE=32;     // idx,hash1,hash2,pad,nameOffset(u64),chainLink(u64)
+const MOBILE_BUCKETS=256;       // label hash table: 256 buckets x u64
+const MOBILE_HASH_BYTES=MOBILE_BUCKETS*8;
+const VER_LABEL={1:'V1',2:'V2',3:'Mobile'};
+const VER_GAME={1:'GS5 · Dual Destinies',2:'GS6 · Spirit of Justice',3:'Mobile'};
+function verLabel(v){return VER_LABEL[v]||('V'+v);}
 const LANG_FROM={0:'Japanese',1:'English',2:'French',3:'Spanish',4:'German',5:'Italian'};
 const LANG_TO={Japanese:0,English:1,French:2,Spanish:3,German:4,Italian:5};
 function replaceFullwidth(s){return s.replace(/[\uFF00-\uFFEF]/g,'###');}
+
+// V2:     41+nameSize + 20*labels + 1024 (hash table)        + labelSize + sectionSize
+// Mobile: 41+nameSize + 32*labels + 2048 (256 x u64 buckets) + labelSize + sectionSize
+function isMobileGmd(buf){
+  const u8=buf instanceof Uint8Array?buf:new Uint8Array(buf);
+  if(u8.length<41)return false;
+  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  const lc=dv.getUint32(20,true),ls=dv.getUint32(28,true),ss=dv.getUint32(32,true),ns=dv.getUint32(36,true);
+  const base=41+ns;
+  const mobileLen=base+MOBILE_ENTRY_SIZE*lc+MOBILE_HASH_BYTES+ls+ss;
+  const v2Len=base+20*lc+1024+ls+ss;
+  if(u8.length===mobileLen)return true;
+  if(u8.length===v2Len)return false;
+  // Neither size matches exactly (e.g. trailing padding): fall back to the entry layout.
+  // A Mobile entry 0 is followed by 20 zero bytes (pad, nameOffset 0, chain link); in V2 entry 1 starts there.
+  if(lc>=2&&u8.length>=base+MOBILE_ENTRY_SIZE*lc+MOBILE_HASH_BYTES){
+    for(let i=base+12;i<base+MOBILE_ENTRY_SIZE;i++)if(u8[i]!==0)return false;
+    return dv.getUint32(base+MOBILE_ENTRY_SIZE,true)===1;   // next entry's index
+  }
+  return false;
+}
 
 function detectGmdVersion(u8){
   if(!(u8[0]===71&&u8[1]===77&&u8[2]===68&&u8[3]===0))return null;
   const dv=new DataView(u8.buffer,u8.byteOffset);
   const le=dv.getUint32(4,true);
-  if(VER_FROM[le])return VER_FROM[le];
+  if(VER_FROM[le])return (VER_FROM[le]===2&&isMobileGmd(u8))?MOBILE_VER:VER_FROM[le];
   const be=dv.getUint32(4,false);
   if(VER_FROM[be])return VER_FROM[be];
   return null;
@@ -372,7 +407,8 @@ function parseGmd(buf,isLE=true){
   const magic=r.bytes(4);
   if(!(magic[0]===71&&magic[1]===77&&magic[2]===68&&magic[3]===0))throw new Error('Not a GMD file (bad magic)');
   const versionRaw=r.u32();
-  const version=VER_FROM[versionRaw];
+  let version=VER_FROM[versionRaw];
+  if(version===2&&isMobileGmd(r.a))version=MOBILE_VER;
   if(!version)throw new Error(`Unsupported GMD version: 0x${versionRaw.toString(16)}`);
   const langRaw=r.u32();
   const language=LANG_FROM[langRaw]??String(langRaw);
@@ -387,7 +423,15 @@ function parseGmd(buf,isLE=true){
   let labelRef1=[],labelRef2=[];
   let labelMap={label_data:[],ff_marker:[]};
 
-  if(version===1){
+  if(version===MOBILE_VER){
+    // 32-byte entries: idx, hash1, hash2, pad, nameOffset(u64), chainLink(u64); labelOffsets keeps [idx,h1,h2] per label
+    for(let i=0;i<labelCount;i++){
+      const idx=r.u32(),h1=r.u32(),h2=r.u32();r.u32();
+      const nameOff=r.u32();r.skip(12);
+      labelOffsets.push(idx);labelOffsets.push(h1);labelOffsets.push(h2);labelRef2.push(nameOff);
+    }
+    r.skip(MOBILE_HASH_BYTES);   // bucket table is regenerated from the label hashes on encode
+  } else if(version===1){
     for(let i=0;i<labelCount;i++){labelOffsets.push(r.u32());labelOffsets.push(r.u32());}
   } else {
     for(let i=0;i<labelCount;i++){
@@ -403,14 +447,25 @@ function parseGmd(buf,isLE=true){
   }
 
   const labelNames=[];
-  for(let i=0;i<labelCount;i++){
-    const ptrIdx=version===1?(2*i+1):(3*i+1);
-    if(labelOffsets[ptrIdx]===0)labelNames.push('NO_LABEL');
-    else labelNames.push(r.nullStr());
+  if(version===MOBILE_VER){
+    // names live in one block; each entry points into it by offset
+    const nameBlock=r.bytes(labelSize);
+    for(let i=0;i<labelCount;i++){
+      if(labelOffsets[3*i+1]===0&&labelOffsets[3*i+2]===0){labelNames.push('NO_LABEL');continue;}
+      let o=labelRef2[i],e=o;
+      while(e<nameBlock.length&&nameBlock[e]!==0)e++;
+      labelNames.push(new TextDecoder('utf-8').decode(nameBlock.slice(o,e)));
+    }
+  } else {
+    for(let i=0;i<labelCount;i++){
+      const ptrIdx=version===1?(2*i+1):(3*i+1);
+      if(labelOffsets[ptrIdx]===0)labelNames.push('NO_LABEL');
+      else labelNames.push(r.nullStr());
+    }
   }
 
   const rawContent=r.bytes(sectionSize);
-  const content=processContent(rawContent);
+  const content=version===MOBILE_VER?rawContent:processContent(rawContent);   // Mobile is never XOR-encrypted
   const dec=new TextDecoder('utf-8').decode(content).replace(/\r\n/g,'\n');
   const parts=dec.split('\x00');
 
@@ -420,16 +475,18 @@ function parseGmd(buf,isLE=true){
 
   const result={version,language,labelCount,sectionCount,labelSize,sectionSize,nameSize,filename,labelOffsets,labelNames,sectionContent,labelMap};
   if(version===2){result.labelRef1=labelRef1;result.labelRef2=labelRef2;}
+  if(version===MOBILE_VER)result.unknown1=unknown1>>>0;
   return result;
 }
 
 function gmdToText(gmd){
   const lines=[];
   lines.push(`{${gmd.filename}}\n`);
-  lines.push(`{GMD V${gmd.version}}\n`);
+  lines.push(gmd.version===MOBILE_VER?`{GMD Mobile}\n`:`{GMD V${gmd.version}}\n`);
   lines.push(`{${gmd.language}}\n`);
   lines.push(`{${gmd.labelCount}}\n`);
   lines.push(`{${gmd.sectionCount}}\n`);
+  if(gmd.version===MOBILE_VER)lines.push(`{${gmd.unknown1>>>0}}\n`);   // header field of unknown purpose, kept for lossless round-trip
   if(gmd.version===2){
     if(gmd.labelRef2)lines.push(`{${JSON.stringify(gmd.labelRef2)}}\n`);
     lines.push(`{${JSON.stringify(gmd.labelMap.label_data)}}\n`);
@@ -449,21 +506,25 @@ function gmdToText(gmd){
 
 // ── TEXT → GMD ──────────────────────────────────────
 function textToGmd(text,isLE=true,targetVer=null){
-  const lines=text.split('\n');let li=0;
+  const lines=text.replace(/\r\n/g,'\n').split('\n');let li=0;   // tolerate CRLF text files
   const filename=lines[li++].trim().replace(/^\{|\}$/g,'');
-  let version=parseInt(lines[li++].trim().replace(/^\{|\}$/g,'').replace('GMD V',''));
-  if(targetVer&&[1,2].includes(targetVer))version=targetVer;
+  const verTxt=lines[li++].trim().replace(/^\{|\}$/g,'');
+  const textVer=/mobile/i.test(verTxt)?MOBILE_VER:parseInt(verTxt.replace('GMD V',''));
+  let version=textVer;
+  if(targetVer&&[1,2,MOBILE_VER].includes(targetVer))version=targetVer;
+  if(textVer===MOBILE_VER&&version!==MOBILE_VER)throw new Error('This text came from a Mobile GMD and can only be encoded back as Mobile.');
   const language=lines[li++].trim().replace(/^\{|\}$/g,'');
   const labelCount=parseInt(lines[li++].trim().replace(/^\{|\}$/g,''));
   const sectionCount=parseInt(lines[li++].trim().replace(/^\{|\}$/g,''));
-  let lr2='[]',lm='[]',lmm='[]';
-  if(version===2){lr2=lines[li++].trim().replace(/^\{|\}$/g,'');lm=lines[li++].trim().replace(/^\{|\}$/g,'');lmm=lines[li++].trim().replace(/^\{|\}$/g,'');}
+  let lr2='[]',lm='[]',lmm='[]',unknown1=0;
+  if(textVer===MOBILE_VER){unknown1=(parseInt(lines[li++].trim().replace(/^\{|\}$/g,''))>>>0)||0;}
+  else if(version===2){lr2=lines[li++].trim().replace(/^\{|\}$/g,'');lm=lines[li++].trim().replace(/^\{|\}$/g,'');lmm=lines[li++].trim().replace(/^\{|\}$/g,'');}
   while(li<lines.length&&lines[li].trim()==='')li++;
 
   const labels=[];let cur=null,cc=[];
   for(;li<lines.length;li++){
     const line=lines[li];
-    if(line.startsWith('{')&&line.includes(':')){
+    if(/^\{\s*\d+\s*:[^:}]*:.*\}\s*$/.test(line)){
       if(cur){cur.content=cc.join('\n').replace(/\n+$/,'');labels.push(cur);cc=[];}
       const inner=line.slice(1,line.lastIndexOf('}'));
       const parts=inner.split(':');
@@ -486,6 +547,8 @@ function textToGmd(text,isLE=true,targetVer=null){
     if(version===1){offsets.push(label.index);offsets.push(label.offset);}
     else{const[h1o,h2o]=[label.offset.hash1,label.offset.hash2];const[h1n,h2n]=calcHash(label.name);offsets[label.index]=[h1o!==h1n?h1n:h1o,h2o!==h2n?h2n:h2o];}
   }
+
+  if(version===MOBILE_VER)return buildMobileGmd({filename,language,labelCount,sectionCount,unknown1,labels,contentBytes,isLE});
 
   const labelStr=labelNames.join('\x00')+'\x00';
   const labelSizeCalc=labelCount<1?0:replaceFullwidth(labelStr).length;
@@ -520,6 +583,60 @@ function textToGmd(text,isLE=true,targetVer=null){
 
   for(const n of labelNames){w.str(n);w.u8(0);}
   w.write(xorEncoding?xorCipher(contentBytes,1):contentBytes);
+  return w.toU8();
+}
+
+// ── MOBILE GMD WRITER ───────────────────────────────
+// Layout: header · 32-byte label entries · 256×u64 hash buckets · label-name block · content (plain text)
+// Bucket for a label = (~crc32(name)) & 0xFF; it stores the label's index (index 0 is stored as 0xFFFFFFFF_FFFFFFFF
+// because 0 means "empty"). Labels sharing a bucket are chained through the entry's trailing u64.
+function buildMobileGmd({filename,language,labelCount,sectionCount,unknown1,labels,contentBytes,isLE}){
+  const enc=new TextEncoder();
+  // keep counts in step with the labels actually present (the header text may be stale after edits)
+  const count=labels.length;
+  const sections=(sectionCount===labelCount)?count:sectionCount;
+
+  const entries=[];const nameParts=[];let nameOff=0;
+  for(const l of labels){
+    if(l.name==='NO_LABEL'){entries.push({idx:l.index,h1:0,h2:0,off:0,link:0,named:false});continue;}
+    const b=enc.encode(l.name);const[h1,h2]=calcHash(l.name);
+    entries.push({idx:l.index,h1,h2,off:nameOff,link:0,named:true,bucket:(~crc32(l.name))&0xFF});
+    nameParts.push(b);nameOff+=b.length+1;
+  }
+  const nameBlock=new Uint8Array(nameOff);
+  {let o=0;for(const b of nameParts){nameBlock.set(b,o);o+=b.length+1;}}
+
+  // bucket table (+ chain links for colliding labels)
+  const bucketHead=new Array(MOBILE_BUCKETS).fill(-1),bucketTail=new Array(MOBILE_BUCKETS).fill(-1);
+  entries.forEach((e,i)=>{
+    if(!e.named)return;
+    if(bucketHead[e.bucket]<0)bucketHead[e.bucket]=i;else entries[bucketTail[e.bucket]].link=e.idx;
+    bucketTail[e.bucket]=i;
+  });
+
+  const fname=enc.encode(filename);
+  const w=new Writer();
+  w.write([71,77,68,0]);
+  w.u32(VER_TO[MOBILE_VER],isLE);
+  w.u32(LANG_TO[language]??(/^\d+$/.test(language)?parseInt(language):0),isLE);
+  w.u32(unknown1,isLE);w.u32(0,isLE);
+  w.u32(count,isLE);w.u32(sections,isLE);
+  w.u32(nameBlock.length,isLE);w.u32(contentBytes.length,isLE);w.u32(fname.length,isLE);
+  w.write(fname);w.u8(0);
+
+  for(const e of entries){
+    w.u32(e.idx,isLE);w.u32(e.h1,isLE);w.u32(e.h2,isLE);w.u32(0,isLE);
+    w.u32(e.off,isLE);w.u32(0,isLE);          // nameOffset (u64)
+    w.u32(e.link,isLE);w.u32(0,isLE);         // chain link (u64)
+  }
+  for(let b=0;b<MOBILE_BUCKETS;b++){
+    const h=bucketHead[b];
+    if(h<0){w.u32(0,isLE);w.u32(0,isLE);}
+    else if(entries[h].idx===0){w.u32(0xFFFFFFFF,isLE);w.u32(0xFFFFFFFF,isLE);}
+    else{w.u32(entries[h].idx,isLE);w.u32(0,isLE);}
+  }
+  w.write(nameBlock);
+  w.write(contentBytes);
   return w.toU8();
 }
 
@@ -974,16 +1091,16 @@ setupDrop('drop-decode','dec-file-input',async f=>{
   const buf=await readArrayBuffer(f);
   decFileData=new Uint8Array(buf);
   const ver=detectGmdVersion(decFileData);
-  const game=ver===1?'GS5 · Dual Destinies':ver===2?'GS6 · Spirit of Justice':null;
+  const game=VER_GAME[ver]||null;
   if(game){
-    document.getElementById('dec-ver-badge').textContent=`V${ver} — ${game}`;
-    setStatus('dec-status',`Auto-detected GMD V${ver} (${game}) · ${formatBytes(f.size)}`,'ok');
+    document.getElementById('dec-ver-badge').textContent=ver===MOBILE_VER?'Mobile':`${verLabel(ver)} — ${game}`;
+    setStatus('dec-status',`Auto-detected GMD ${verLabel(ver)}${ver===MOBILE_VER?'':` (${game})`} · ${formatBytes(f.size)}`,'ok');
   } else {
     setStatus('dec-status','Loaded · version unknown (will attempt decode)','warn');
   }
   try{
     const gmd=parseGmd(buf,true);
-    setMeta('dec-meta',[['Version','V'+gmd.version],['Language',gmd.language],['Labels',String(gmd.labelCount)],['Sections',String(gmd.sectionCount)],['File',gmd.filename||'—'],['Size',formatBytes(f.size)]]);
+    setMeta('dec-meta',[['Version',verLabel(gmd.version)],['Language',gmd.language],['Labels',String(gmd.labelCount)],['Sections',String(gmd.sectionCount)],['File',gmd.filename||'—'],['Size',formatBytes(f.size)]]);
   }catch{
     setMeta('dec-meta',[['File',f.name],['Size',formatBytes(f.size)],['Version',ver?'V'+ver:'?']]);
   }
@@ -1000,7 +1117,7 @@ async function runDecode(){
     document.getElementById('dec-preview').value=text;
     document.getElementById('dec-dl-meta').textContent=decOutName+' · '+formatBytes(new Blob([text]).size);
     document.getElementById('dec-out-card').style.display='';
-    setStatus('dec-status',`Decoded · V${gmd.version} · ${gmd.labelCount} labels · ${gmd.sectionCount} sections`,'ok');
+    setStatus('dec-status',`Decoded · ${verLabel(gmd.version)} · ${gmd.labelCount} labels · ${gmd.sectionCount} sections`,'ok');
   }catch(e){setStatus('dec-status','Error: '+e.message,'err');}
 }
 
@@ -1016,10 +1133,10 @@ setupDrop('drop-encode','enc-file-input',async f=>{
   document.getElementById('enc-out-card').style.display='none';
   document.getElementById('enc-status').style.display='none';
   encFileText=await readText(f);
-  const vMatch=encFileText.match(/\{GMD V(\d+)\}/);
-  const ver=vMatch?parseInt(vMatch[1]):null;
-  if(ver===1||ver===2) setEncVer(ver);
-  const verNote=ver?` · GMD V${ver} detected`:'';
+  const vMatch=encFileText.match(/\{GMD (V(\d+)|Mobile)\}/);
+  const ver=vMatch?(vMatch[1]==='Mobile'?MOBILE_VER:parseInt(vMatch[2])):null;
+  if(ver===1||ver===2||ver===MOBILE_VER) setEncVer(ver);
+  const verNote=ver?` · GMD ${verLabel(ver)} detected`:'';
   setStatus('enc-status','Loaded '+f.name+' · '+formatBytes(f.size)+verNote,'ok');
   document.getElementById('btn-encode').disabled=false;
 });
@@ -1033,7 +1150,7 @@ async function runEncode(){
     const xorUsed=(encTargetVer===1);
     document.getElementById('enc-dl-meta').textContent=encOutName+' · '+formatBytes(encOutBytes.length)+(xorUsed?' · XOR encrypted':'');
     document.getElementById('enc-out-card').style.display='';
-    setStatus('enc-status',`Encoded as GMD V${encTargetVer} → ${encOutName}${xorUsed?' (XOR applied)':''}`,'ok');
+    setStatus('enc-status',`Encoded as GMD ${verLabel(encTargetVer)} → ${encOutName}${xorUsed?' (XOR applied)':''}`,'ok');
   }catch(e){setStatus('enc-status','Error: '+e.message,'err');}
 }
 
@@ -1052,11 +1169,11 @@ setupDrop('drop-simple','sim-file-input',async f=>{
   const buf=await readArrayBuffer(f);
   simFileData=new Uint8Array(buf);
   const ver=detectGmdVersion(simFileData);
-  const game=ver===1?'GS5 · DD':ver===2?'GS6 · SoJ':null;
+  const game=ver===1?'GS5 · DD':ver===2?'GS6 · SoJ':ver===MOBILE_VER?'Mobile':null;
   if(game){
-    document.getElementById('sim-ver-badge').textContent=`V${ver} — ${game}`;
-    setMeta('sim-meta',[['Version','V'+ver],['Game',game],['File',f.name],['Size',formatBytes(f.size)]]);
-    setStatus('sim-status',`Auto-detected V${ver} (${game}) · ${formatBytes(f.size)}`,'ok');
+    document.getElementById('sim-ver-badge').textContent=ver===MOBILE_VER?'Mobile':`${verLabel(ver)} — ${game}`;
+    setMeta('sim-meta',[['Version',verLabel(ver)],['Game',game],['File',f.name],['Size',formatBytes(f.size)]]);
+    setStatus('sim-status',`Auto-detected ${verLabel(ver)}${ver===MOBILE_VER?'':` (${game})`} · ${formatBytes(f.size)}`,'ok');
   } else {
     setMeta('sim-meta',[['File',f.name],['Size',formatBytes(f.size)],['Version','?']]);
     setStatus('sim-status','Loaded · version unknown','warn');
@@ -1070,7 +1187,7 @@ async function runSimple(){
   try{
     const gmd=parseGmd(simFileData.buffer,true);
     const decodedText=gmdToText(gmd);
-    const isSOJ=(gmd.version===2);
+    const isSOJ=(gmd.version===2);   // Mobile scripts use the base (DD) tag set, same as V1
 
     setStatus('sim-status','Stage 2/3: Converting tags to JSON…','');
     const jsonData=convertToJson(decodedText, isSOJ);
